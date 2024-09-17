@@ -1,0 +1,1 @@
+docker rm crossword-container
