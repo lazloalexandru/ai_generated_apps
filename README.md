@@ -3,9 +3,13 @@
 These are some simple apps generated with GPTo1
 
 ## CannonBallzzz
+Using existing physics library
+
 ![Screenshot](./screenshots/cannon.png)
 
 ## Ballz
+Here AI implemented collision detection and physics stuff from scratch.
+
 ![Screenshot](./screenshots/ballz.png)
 
 ## 3DPool
