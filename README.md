@@ -2,16 +2,14 @@
 
 These are some simple apps generated with GPTo1
 
+## CannonBallzzz
+![Screenshot](./screenshots/cannon.png)
+
 ## 3DPool
 ![Screenshot](./screenshots/pool.png)
 
-
 ## Chess
-![Screenshot](./screenshots/pool.png)
-
-## CannonBallzzz
-![Screenshot](./screenshots/pool.png)
-
+![Screenshot](./screenshots/chess.png)
 
 ## Crossword Generator
 ![Screenshot](./screenshots/cross.png)
@@ -20,4 +18,4 @@ Some are python scripts, and there is one website which I deployed and can be ac
  
 => https://bizbas.com
 
-For python scipts install missing dependencies manually ... ot ask GPTo1 how to do it ;)
+For python scipts install missing dependencies manually ... ot ask GPTo1 how to do it
