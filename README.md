@@ -12,10 +12,11 @@ These are some simple apps generated with GPTo1
 ![Screenshot](./screenshots/chess.png)
 
 ## Crossword Generator
+
+Try deployed version here => https://bizbas.com
+
 ![Screenshot](./screenshots/cross.png)
 
-Some are python scripts, and there is one website which I deployed and can be accessed at
- 
-=> https://bizbas.com
+# Notes
 
-For python scipts install missing dependencies manually ... ot ask GPTo1 how to do it
+For python scipts install missing dependencies manually (if needed ask GPT4o how to do it)
