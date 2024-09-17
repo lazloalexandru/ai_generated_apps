@@ -1,19 +1,19 @@
-#AI Generated Test Apps
+# AI Generated Test Apps
 
 These are some simple apps generated with GPTo1
 
-##3DPool
+## 3DPool
 ![Screenshot](./screenshots/pool.png)
 
 
-##Chess
+## Chess
 ![Screenshot](./screenshots/pool.png)
 
-##CannonBallzzz
+## CannonBallzzz
 ![Screenshot](./screenshots/pool.png)
 
 
-##Crossword Generator
+## Crossword Generator
 ![Screenshot](./screenshots/cross.png)
 
 Some are python scripts, and there is one website which I deployed and can be accessed at
