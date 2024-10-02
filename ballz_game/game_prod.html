@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cannon Game with Instructions</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            background-color: skyblue;
+        }
+        #winMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial, sans-serif;
+            color: white;
+            background-color: rgba(0, 128, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            text-align: center;
+        }
+        #resetButton {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #tooltip {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-family: Arial, sans-serif;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="winMessage">
+        <h2>Congratulations! You hit the target!</h2>
+        <button id="resetButton">Reset Game</button>
+    </div>
+    <div id="tooltip">
+        Aim and click to fire. Hit the box with the red 'X' to win!
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.17.1/matter.min.js"></script>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const context = canvas.getContext("2d");
+
+        // Initialize Matter.js engine and world
+        const { Engine, World, Bodies, Body, Events, Runner } = Matter;
+        let engine;
+        let world;
+        let runner;
+
+        // Load textures
+        const crateTexture = new Image();
+        crateTexture.src = 'crate.png';  // Path to crate texture
+
+        const grassTexture = new Image();
+        grassTexture.src = 'grass.png';  // Path to grass texture
+
+        const beamTexture = new Image();
+        beamTexture.src = 'beam.png';    // Path to beam texture for steel beams
+
+        const rockTexture = new Image();
+        rockTexture.src = 'rock.png';    // Path to rock texture for the ceiling
+
+        // Cannon object
+        let cannon = {
+            x: 100,
+            y: canvas.height - 70, // Positioned on the ground (70px from bottom)
+            angle: Math.PI / 4, // 45 degrees
+            power: 10, // Default power
+            maxPower: 15, // Maximum power
+            baseWidth: 70, // Increased base size
+            baseHeight: 30,
+            barrelLength: 75, // 50% longer
+            barrelWidth: 15,
+            draw: function() {
+                // Draw cannon base
+                context.fillStyle = "gray"; // Gray body
+                context.fillRect(this.x - this.baseWidth / 2, this.y - this.baseHeight / 2, this.baseWidth, this.baseHeight);
+
+                // Draw rotating barrel
+                context.save();
+                context.translate(this.x, this.y);
+                context.rotate(-this.angle);
+                context.fillStyle = "#A9A9A9"; // Lighter tone of gray for the barrel
+                context.fillRect(0, -this.barrelWidth / 2, this.barrelLength, this.barrelWidth);
+                context.restore();
+            },
+            adjustAngleAndPower: function(mouseX, mouseY) {
+                const dx = mouseX - this.x;
+                const dy = this.y - mouseY;
+                this.angle = Math.atan2(dy, dx); // Angle between cannon and mouse position
+                this.power = Math.min(this.maxPower, Math.sqrt(dx * dx + dy * dy) / 40); // Adjust scaling to fit max power
+            }
+        };
+
+        let cannonBase, ground, ceiling, steelColumns;
+        let bricks = [];
+        let cannonballs = [];
+        let targetBrick;
+        let gameWon = false;
+
+        // Initialize canvas size to match the window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            resetGame(); // Reset the game when window is resized
+        }
+
+        // Adjust canvas and reset game on window resize
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        function resetGame() {
+            // Hide win message
+            document.getElementById('winMessage').style.display = 'none';
+            gameWon = false;
+
+            // Clear existing world
+            if (engine) {
+                World.clear(world, false);
+                Engine.clear(engine);
+                engine = null;
+                world = null;
+                bricks = [];
+                cannonballs = [];
+                // Stop the runner
+                Runner.stop(runner);
+                runner = null;
+            }
+
+            // Create new engine and world
+            engine = Engine.create();
+            world = engine.world;
+
+            // Adjust time step to improve collision detection
+            runner = Runner.create();
+            runner.isFixed = false;
+            runner.delta = 1000 / 60; // 60 fps
+
+            // Reset cannon position
+            cannon.y = canvas.height - 70;
+
+            // Create cannon base
+            cannonBase = Bodies.rectangle(cannon.x, cannon.y, cannon.baseWidth, cannon.baseHeight, { isStatic: true });
+            World.add(world, cannonBase);
+
+            // Create ground
+            ground = Bodies.rectangle(canvas.width / 2, canvas.height - 25, canvas.width, 50, { isStatic: true });
+            World.add(world, ground);
+
+            // Create ceiling with zig-zags
+            createCeiling();
+
+            // Create steel columns
+            createSteelColumns();
+
+            // Create multiple columns of bricks
+            createBricks();
+
+            // Set up collision detection
+            setupCollisionDetection();
+
+            // Start the runner
+            Runner.run(runner, engine);
+        }
+
+        // Function to create multiple columns of bricks with variation
+        function createBricks() {
+            const brickWidth = 50;
+            const brickHeight = 30;
+            const columns = 5;
+            const rows = 5;
+            const startX = canvas.width - 400;
+            const startY = canvas.height - 80;
+            const gap = 10;
+
+            for (let i = 0; i < columns; i++) {
+                for (let j = 0; j < rows; j++) {
+                    const xVariation = (Math.random() - 0.5) * gap;
+                    const yVariation = (Math.random() - 0.5) * gap;
+                    const x = startX + i * (brickWidth + gap) + xVariation;
+                    const y = startY - j * (brickHeight + gap) + yVariation;
+
+                    // Ensure bricks do not overlap with other elements
+                    if (!isOverlappingWithBeams(x, y, brickWidth, brickHeight)) {
+                        const brick = Bodies.rectangle(x, y, brickWidth, brickHeight);
+                        bricks.push(brick);
+                        World.add(world, brick);
+                    }
+                }
+            }
+
+            // Randomly select one brick as the target
+            if (bricks.length > 0) {
+                const randomIndex = Math.floor(Math.random() * bricks.length);
+                targetBrick = bricks[randomIndex];
+            }
+        }
+
+        // Function to check if a position overlaps with any beams
+        function isOverlappingWithBeams(x, y, width, height) {
+            const bodies = [...steelColumns];
+            for (let body of bodies) {
+                if (Matter.Bounds.overlaps(body.bounds, {
+                    min: { x: x - width / 2, y: y - height / 2 },
+                    max: { x: x + width / 2, y: y + height / 2 }
+                })) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Function to create ceiling with zig-zags
+        function createCeiling() {
+            const points = [];
+            const segments = 20;
+            const segmentWidth = canvas.width / segments;
+
+            let lastY = 50;  // Start from 50px down from the top
+
+            points.push({ x: 0, y: 0 }); // Starting point at top-left corner
+
+            for (let i = 0; i <= segments; i++) {
+                const x = i * segmentWidth;
+                const y = lastY + (Math.random() * 60 - 30); // More variation for zig-zags
+                points.push({ x, y });
+                lastY = y;
+            }
+
+            points.push({ x: canvas.width, y: 0 }); // Ending point at top-right corner
+
+            // Create ceiling body
+            const ceilingShape = Bodies.fromVertices(canvas.width / 2, 0, [points], { isStatic: true }, true);
+            ceiling = ceilingShape;
+            World.add(world, ceiling);
+        }
+
+        // Function to create steel columns on the ground
+        function createSteelColumns() {
+            steelColumns = [];
+            const columnWidth = 30;
+            const columnHeight = 200;
+            const positions = [
+                { x: canvas.width - 500, y: canvas.height - 150 },
+                { x: canvas.width - 200, y: canvas.height - 150 }
+            ];
+
+            positions.forEach(pos => {
+                const column = Bodies.rectangle(pos.x, pos.y, columnWidth, columnHeight, { isStatic: true });
+                steelColumns.push(column);
+                World.add(world, column);
+            });
+        }
+
+        // Cannonball firing function
+        function fireCannonball() {
+            if (gameWon) return; // Do not allow firing after winning
+
+            const angle = cannon.angle;
+            const power = cannon.power;
+            const velocity = {
+                x: Math.cos(angle) * power * 5,  // Scale down power to fit screen space
+                y: Math.sin(angle) * power * -5  // Negative because upward is negative Y
+            };
+            const ball = Bodies.circle(cannon.x + Math.cos(angle) * cannon.barrelLength, cannon.y - Math.sin(angle) * cannon.barrelLength, 10, {
+                restitution: 0.8,
+                frictionAir: 0.005
+            });
+            Body.setVelocity(ball, velocity);  // Apply velocity to the cannonball
+            cannonballs.push(ball);
+            World.add(world, ball);
+        }
+
+        // Mouse controls for adjusting cannon
+        window.addEventListener("mousemove", (event) => {
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+            cannon.adjustAngleAndPower(mouseX, mouseY);  // Adjust cannon angle and power based on mouse movement
+        });
+
+        // Mouse click to fire
+        window.addEventListener("mousedown", () => {
+            fireCannonball();  // Fire cannonball when mouse is clicked
+        });
+
+        // Draw the power indicator next to the cannon
+        function drawPowerIndicator() {
+            const powerBarWidth = 10;
+            const powerBarHeight = 100;
+            const powerPercentage = cannon.power / cannon.maxPower;
+            const filledHeight = powerPercentage * powerBarHeight;
+
+            // Draw the background of the power bar
+            context.fillStyle = "black";
+            context.fillRect(cannon.x - 30, cannon.y - powerBarHeight - 20, powerBarWidth, powerBarHeight);
+
+            // Draw the filled part of the power bar
+            context.fillStyle = "red";
+            context.fillRect(cannon.x - 30, cannon.y - filledHeight - 20, powerBarWidth, filledHeight);
+        }
+
+        // Draw the ground with grass texture
+        function drawGround() {
+            const pattern = context.createPattern(grassTexture, 'repeat');
+            context.fillStyle = pattern;
+            context.fillRect(0, canvas.height - 50, canvas.width, 50);  // Ground is 50px high
+        }
+
+        // Draw the ceiling with rock texture
+        function drawCeiling() {
+            context.save();
+            const pattern = context.createPattern(rockTexture, 'repeat');
+            context.translate(ceiling.position.x, ceiling.position.y);
+            context.rotate(ceiling.angle);
+            context.beginPath();
+            context.moveTo(ceiling.vertices[0].x - ceiling.position.x, ceiling.vertices[0].y - ceiling.position.y);
+            for (let i = 1; i < ceiling.vertices.length; i++) {
+                context.lineTo(ceiling.vertices[i].x - ceiling.position.x, ceiling.vertices[i].y - ceiling.position.y);
+            }
+            context.closePath();
+            context.fillStyle = pattern;
+            context.fill();
+            context.restore();
+        }
+
+        // Draw the bricks with crate texture and mark the target brick
+        function drawBricks() {
+            const brickWidth = 50;
+            const brickHeight = 30;
+            bricks.forEach(brick => {
+                context.save();
+                context.translate(brick.position.x, brick.position.y);
+                context.rotate(brick.angle);
+                context.drawImage(crateTexture, -brickWidth / 2, -brickHeight / 2, brickWidth, brickHeight);
+
+                // If this is the target brick, draw a red X
+                if (brick === targetBrick) {
+                    context.strokeStyle = "red";
+                    context.lineWidth = 5;
+                    context.beginPath();
+                    context.moveTo(-brickWidth / 2, -brickHeight / 2);
+                    context.lineTo(brickWidth / 2, brickHeight / 2);
+                    context.moveTo(-brickWidth / 2, brickHeight / 2);
+                    context.lineTo(brickWidth / 2, -brickHeight / 2);
+                    context.stroke();
+                }
+
+                context.restore();
+            });
+        }
+
+        // Draw steel columns with beam texture
+        function drawSteelColumns() {
+            steelColumns.forEach(column => {
+                context.save();
+                context.translate(column.position.x, column.position.y);
+                context.rotate(column.angle);
+
+                const width = column.bounds.max.x - column.bounds.min.x;
+                const height = column.bounds.max.y - column.bounds.min.y;
+
+                // Draw the beam texture
+                context.drawImage(beamTexture, -width / 2, -height / 2, width, height);
+
+                context.restore();
+            });
+        }
+
+        // Draw cannonballs
+        function drawCannonballs() {
+            cannonballs.forEach(ball => {
+                context.beginPath();
+                context.arc(ball.position.x, ball.position.y, ball.circleRadius, 0, Math.PI * 2);
+                context.fillStyle = "#333";
+                context.fill();
+            });
+        }
+
+        // Set up collision detection with the target brick
+        function setupCollisionDetection() {
+            Events.on(engine, 'collisionStart', function(event) {
+                event.pairs.forEach(pair => {
+                    if ((pair.bodyA === targetBrick && cannonballs.includes(pair.bodyB)) ||
+                        (pair.bodyB === targetBrick && cannonballs.includes(pair.bodyA))) {
+                        if (!gameWon) {
+                            gameWon = true;
+                            showWinMessage();
+                        }
+                    }
+                });
+            });
+        }
+
+        // Show win message and reset button
+        function showWinMessage() {
+            document.getElementById('winMessage').style.display = 'block';
+        }
+
+        // Add event listener to reset button
+        document.getElementById('resetButton').addEventListener('click', function() {
+            resetGame();
+        });
+
+        // Game loop
+        function gameLoop() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw cannon
+            cannon.draw();
+
+            // Draw ground with grass texture
+            drawGround();
+
+            // Draw ceiling with rock texture
+            drawCeiling();
+
+            // Draw steel columns with beam texture
+            drawSteelColumns();
+
+            // Draw bricks with crate texture and target marker
+            drawBricks();
+
+            // Draw cannonballs
+            drawCannonballs();
+
+            // Draw the power indicator near the cannon
+            drawPowerIndicator();
+
+            // Update the physics engine with smaller time steps for better collision detection
+            Engine.update(engine, 1000 / 60);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game once textures are loaded
+        let texturesLoaded = 0;
+        function checkTexturesLoaded() {
+            texturesLoaded++;
+            if (texturesLoaded === 4) {
+                resizeCanvas(); // Initialize canvas and reset game
+                gameLoop();
+            }
+        }
+        crateTexture.onload = checkTexturesLoaded;
+        grassTexture.onload = checkTexturesLoaded;
+        beamTexture.onload = checkTexturesLoaded;
+        rockTexture.onload = checkTexturesLoaded;
+    </script>
+</body>
+</html>
